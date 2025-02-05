@@ -1,0 +1,12 @@
+FROM rayproject/ray-deps:latest
+
+RUN $HOME/anaconda3/bin/pip install --no-cache-dir 'ray[all]'
+
+# Copy the main.py file
+COPY main.py /app/main.py
+
+# Set the working directory
+WORKDIR /app
+
+# Run the application
+CMD ["python", "main.py"]

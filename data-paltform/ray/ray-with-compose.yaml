@@ -1,0 +1,80 @@
+services:
+  ray-head:
+#    image: rayproject/ray:latest
+    build: .
+    container_name: ray-head
+    environment:
+      - RAY_HEAD=true
+    command: >
+      /bin/bash -c "
+      ray start 
+      --head 
+      --block 
+      --disable-usage-stats 
+      --dashboard-host=0.0.0.0 
+      --dashboard-port=8265 
+      --port=6379 
+      --include-dashboard=true 
+      --log-style=pretty 
+      --log-color=true"
+    ports:
+      - "8265:8265"  # Ray Dashboard
+      - "6379:6379"  # Redis port
+      - "8076:8076"  # Ray Object Manager port
+    volumes:
+      - ./ray_data:/tmp/ray
+    shm_size: '3gb'
+    networks:
+      - ray_net
+    restart: unless-stopped
+
+  ray-worker:
+#    image: rayproject/ray:latest
+    container_name: ray-worker
+    build: .
+    environment:
+      - RAY_HEAD_URL=ray://ray-head:6379
+    command: ray start --address=ray-head:6379 --block
+    depends_on:
+      - ray-head
+    shm_size: '3gb'
+    networks:
+      - ray_net
+
+  jupyter:
+    image: jupyter/scipy-notebook:latest
+    container_name: jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    depends_on:
+      - ray-head
+    command: start-notebook.sh --NotebookApp.token=''
+    networks:
+      - ray_net
+
+
+  ray-datafusion:
+    image: rayproject/ray:latest
+    container_name: ray-datafusion
+    environment:
+      - RAY_HEAD_URL=ray://ray-head:6379
+    volumes:
+      - ./ray_datafusion:/home/jovyan/datafusion
+    command: /bin/bash -c "pip install ray[datafusion] && jupyter-notebook --ip=0.0.0.0 --port=8889 --allow-root"
+    depends_on:
+      - ray-head
+      - jupyter
+    restart: always
+    networks:
+      - ray_net
+
+networks:
+  ray_net:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.63.0.0/16
